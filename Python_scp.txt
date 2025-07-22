@@ -1,0 +1,48 @@
+import sys
+import os
+import uuid
+import pandas as pd
+from sqlalchemy import create_engine
+from datetime import datetime
+
+def get_db_connection(user, password, host, port, db_name):
+    """Create and return a connection to the PostgreSQL database"""
+    url = f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
+    return create_engine(url)
+
+def export_to_parquet(df, table_name, output_path):
+    """Convert the dataframe to Parquet format and save it with a unique filename"""
+    filename = f"{table_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.parquet"
+    full_path = os.path.join(output_path, filename)
+    df.to_parquet(full_path, engine='pyarrow', index=False)
+    print(f"✅ Exported to {full_path}")
+
+def main():
+    if len(sys.argv) != 7:
+        print("Usage: python export_pg_tables_to_parquet.py <DB_USER> <DB_PASSWORD> <DB_HOST> <DB_PORT> <DB_NAME> <SCHEMA1> <SCHEMA2>")
+        sys.exit(1)
+
+    # Extract arguments
+    DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, SCHEMA1, SCHEMA2 = sys.argv[1:]
+
+    # Hardcoded output path
+    OUTPUT_PATH = './output_parquet_files'
+    os.makedirs(OUTPUT_PATH, exist_ok=True)
+
+    # DB connection
+    engine = get_db_connection(DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+
+    # Queries for both schemas
+    queries = {
+        f"{SCHEMA1}.txn_dtl": f"SELECT * FROM {SCHEMA1}.txn_dtl",
+        f"{SCHEMA2}.txn_dtl_audit": f"SELECT * FROM {SCHEMA2}.txn_dtl_audit"
+    }
+
+    # Execute queries and export to Parquet
+    for table_name, query in queries.items():
+        print(f"📥 Querying: {query}")
+        df = pd.read_sql(query, engine)
+        export_to_parquet(df, table_name.replace('.', '_'), OUTPUT_PATH)
+
+if __name__ == "__main__":
+    main()
