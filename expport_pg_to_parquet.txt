@@ -1,0 +1,64 @@
+import psycopg2
+import pandas as pd
+from datetime import datetime
+import os
+
+# === HARD-CODED DB CONFIG ===
+DB_HOST = 'localhost'
+DB_PORT = '5432'
+DB_NAME = 'your_db_name'
+DB_USER = 'your_db_user'
+DB_PASSWORD = 'your_db_password'
+
+# === OUTPUT DIRECTORY ===
+OUTPUT_DIR = '/path/to/your/output/folder'  # change this path
+
+# === QUERIES ===
+QUERY_CORE = "SELECT * FROM p2p_core.txn_dtl"
+QUERY_AUDIT = "SELECT * FROM p2p_audit.txn_dtl_adut"
+
+def get_pg_connection():
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD
+    )
+    return conn
+
+def fetch_data(query, connection):
+    return pd.read_sql(query, connection)
+
+def save_parquet(df, filename):
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    full_path = os.path.join(OUTPUT_DIR, filename)
+    df.to_parquet(full_path, index=False)
+    print(f"Saved: {full_path}")
+
+def main():
+    try:
+        conn = get_pg_connection()
+        print("Connected to database.")
+
+        # Fetch from p2p_core
+        df_core = fetch_data(QUERY_CORE, conn)
+        core_filename = f"p2p_core_txn_dtl_{datetime.now().strftime('%Y%m%d_%H%M%S')}.parquet"
+        save_parquet(df_core, core_filename)
+
+        # Fetch from p2p_audit
+        df_audit = fetch_data(QUERY_AUDIT, conn)
+        audit_filename = f"p2p_audit_txn_dtl_adut_{datetime.now().strftime('%Y%m%d_%H%M%S')}.parquet"
+        save_parquet(df_audit, audit_filename)
+
+    except Exception as e:
+        print("Error:", e)
+    finally:
+        if 'conn' in locals():
+            conn.close()
+            print("Database connection closed.")
+
+if __name__ == "__main__":
+    main()
